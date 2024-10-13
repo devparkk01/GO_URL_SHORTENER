@@ -1,30 +1,39 @@
 package main
 
 import (
+	"URL_SHORTENER/controller"
+	"URL_SHORTENER/storage"
 	"fmt"
 	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 func main() {
 	routePrefix := "/api/short"
-	pathParamShortUrlId := "short_url"
-	//port := os.Getenv("PORT")
 	port := ":8080"
+	dbPath := "data/database.sqlite3"
+	// Get a new URL store
+	store, err := storage.NewURLStore(dbPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	controller.Init(store)
 
+	defer store.Close()
 	// Initialise Router
 	r := mux.NewRouter()
 	// Register all the endpoints
 	// Handler to shorten the URL
-	r.HandleFunc(routePrefix, ShortenUrl).Methods("POST")
+	r.HandleFunc(routePrefix, controller.CreateShortUrl).Methods("POST")
 	// Handler to redirect shorten url to the original url
-	r.HandleFunc(routePrefix+fmt.Sprintf("/{%s}", pathParamShortUrlId), FetchUrl).Methods("GET")
+	r.HandleFunc(routePrefix+fmt.Sprintf("/{%s}", controller.PathParamShortUrlId), controller.RedirectUrl).Methods("GET")
 	// Handler to update shorten url
-	r.HandleFunc(routePrefix+fmt.Sprintf("/{%s}", pathParamShortUrlId), UpdateUrl).Methods("PUT")
+	r.HandleFunc(routePrefix+fmt.Sprintf("/{%s}", controller.PathParamShortUrlId), controller.UpdateShortUrl).Methods("PUT")
 	// Handler to delete shorten url
-	r.HandleFunc(routePrefix+fmt.Sprintf("/{%s}", pathParamShortUrlId), DeleteUrl).Methods("DELETE")
+	r.HandleFunc(routePrefix+fmt.Sprintf("/{%s}", controller.PathParamShortUrlId), controller.DeleteShortUrl).Methods("DELETE")
 
 	// Listen and Serve the request
 	log.Fatal(http.ListenAndServe(port, r))
