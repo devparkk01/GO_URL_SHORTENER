@@ -20,7 +20,7 @@ import (
 
 func TestCreateShortUrl(t *testing.T) {
 
-	var endpoint = "/api/short"
+	var routePrefix = "/api/short"
 	t.Run("Empty Original URL", func(t *testing.T) {
 		resources := SetupTestDB(t)
 		defer resources.TearDown()
@@ -28,12 +28,12 @@ func TestCreateShortUrl(t *testing.T) {
 		params := &CreateShortUrlRequestParams{}
 		params.OriginalUrl = ""
 		jsonBody, _ := json.Marshal(params)
-		req := httptest.NewRequest(http.MethodPost, endpoint, bytes.NewBuffer(jsonBody))
+		req := httptest.NewRequest(http.MethodPost, routePrefix, bytes.NewBuffer(jsonBody))
 		w := httptest.NewRecorder()
 
 		// Set up the router
 		router := mux.NewRouter()
-		router.HandleFunc(endpoint, CreateShortUrl).Methods("POST")
+		router.HandleFunc(routePrefix, CreateShortUrl).Methods("POST")
 		router.ServeHTTP(w, req)
 
 		res := w.Result()
@@ -54,12 +54,12 @@ func TestCreateShortUrl(t *testing.T) {
 		// Setup expectations
 		resources.MockDb.EXPECT().CheckOriginalUrlExists(params.OriginalUrl).Times(1).Return(true)
 
-		req := httptest.NewRequest(http.MethodPost, endpoint, bytes.NewBuffer(jsonBody))
+		req := httptest.NewRequest(http.MethodPost, routePrefix, bytes.NewBuffer(jsonBody))
 		w := httptest.NewRecorder()
 
 		// Create the API router
 		router := mux.NewRouter()
-		router.HandleFunc(endpoint, CreateShortUrl).Methods("POST")
+		router.HandleFunc(routePrefix, CreateShortUrl).Methods("POST")
 		router.ServeHTTP(w, req)
 
 		res := w.Result()
@@ -82,12 +82,12 @@ func TestCreateShortUrl(t *testing.T) {
 		resources.MockDb.EXPECT().CheckOriginalUrlExists(originalUrl).Times(1).Return(false)
 		resources.MockDb.EXPECT().InsertUrl(gomock.Any()).Times(1).Return(nil)
 
-		req := httptest.NewRequest(http.MethodPost, endpoint, bytes.NewBuffer(jsonBody))
+		req := httptest.NewRequest(http.MethodPost, routePrefix, bytes.NewBuffer(jsonBody))
 		w := httptest.NewRecorder()
 
 		// Set up the router
 		router := mux.NewRouter()
-		router.HandleFunc(endpoint, CreateShortUrl).Methods("POST")
+		router.HandleFunc(routePrefix, CreateShortUrl).Methods("POST")
 		router.ServeHTTP(w, req)
 
 		res := w.Result()
