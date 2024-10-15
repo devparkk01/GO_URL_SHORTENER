@@ -25,6 +25,18 @@ func NewURLStore(dbPath string) (*URLStore, error) {
 	if err != nil {
 		return nil, err
 	}
+	if dbPath == ":memory:" {
+		_, err = db.Exec(`
+			CREATE TABLE urls (
+			original_url TEXT PRIMARY KEY NOT NULL,
+			short_url TEXT NOT NULL,
+			created_at TEXT NOT NULL
+			);
+		`)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &URLStore{
 		db: db,
 	}, nil
