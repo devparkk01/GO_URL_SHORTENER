@@ -5,12 +5,23 @@ import (
 	"database/sql"
 )
 
+const SQLITE = "sqlite3"
+
 type URLStore struct {
 	db *sql.DB
 }
 
+type URLOperations interface {
+	InsertUrl(url *models.Url) error
+	CheckShortUrlExists(shortUrl string) bool
+	CheckOriginalUrlExists(originalUrl string) bool
+	GetOriginalUrl(shortUrl string) (*models.Url, error)
+	DeleteShortUrl(shortUrl string) error
+	UpdateShortUrl(updatedShortUrl string, shortUrl string, created_at string) error
+}
+
 func NewURLStore(dbPath string) (*URLStore, error) {
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open(SQLITE, dbPath)
 	if err != nil {
 		return nil, err
 	}
