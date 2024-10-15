@@ -14,15 +14,14 @@ import (
 )
 
 const (
-	HOSTURL             = "http://localhost:"
 	PathParamShortUrlId = "short_url"
 	YYYYMMDDhhmmss      = "2006-01-02 15:04:05"
-	HostUrl
+	charSet             = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 )
 
-var store *storage.URLStore
+var store storage.URLOperations
 
-func Init(urlStore *storage.URLStore) {
+func Init(urlStore storage.URLOperations) {
 	store = urlStore
 }
 
@@ -152,13 +151,12 @@ func DeleteShortUrl(w http.ResponseWriter, r *http.Request) {
 
 // generateUniqueShortUrl generates unique short Url of given length
 func generateUniqueShortUrl(length int) string {
-	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	shortUrl := make([]byte, length)
 	for i := 0; i < length; i++ {
-		charIndex, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
-		shortUrl[i] = charset[charIndex.Int64()]
+		charIndex, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charSet))))
+		shortUrl[i] = charSet[charIndex.Int64()]
 	}
-	return fmt.Sprintf(HOSTURL, string(shortUrl))
+	return string(shortUrl)
 }
 
 func checkOriginalUrlExists(originalUrl string) bool {
