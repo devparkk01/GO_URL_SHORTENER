@@ -19,7 +19,7 @@ func main() {
 	dbPath := "data/database.sqlite3"
 	_ = os.Setenv("DB_PATH", dbPath)
 	// Get a new URL store
-	store, err := storage.NewURLStore(dbPath)
+	store, err := storage.NewURLStore()
 	if err != nil {
 		log.Fatal(err)
 	}

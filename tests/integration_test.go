@@ -23,7 +23,7 @@ func SetupTestDB(t *testing.T) (*mux.Router, *storage.URLStore) {
 	// Create an in-memory database
 	dbPath := ":memory:"
 	_ = os.Setenv("DB_PATH", dbPath)
-	store, err := storage.NewURLStore(dbPath)
+	store, err := storage.NewURLStore()
 	require.NoError(t, err)
 
 	// Initialize controllers with the store

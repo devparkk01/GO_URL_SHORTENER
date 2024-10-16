@@ -25,8 +25,8 @@ type URLOperations interface {
 	UpdateShortUrl(updatedShortUrl string, shortUrl string, created_at string) error
 }
 
-func NewURLStore(dbPath string) (*URLStore, error) {
-	dbPath = os.Getenv("DB_PATH")
+func NewURLStore() (*URLStore, error) {
+	dbPath := os.Getenv("DB_PATH")
 	if dbPath == "" {
 		return nil, errors.New("DB_PATH environment variable not set")
 	}
