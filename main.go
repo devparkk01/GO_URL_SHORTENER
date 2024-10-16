@@ -1,11 +1,12 @@
 package main
 
 import (
-	"URL_SHORTENER/controller"
-	"URL_SHORTENER/storage"
 	"fmt"
 	"log"
 	"net/http"
+
+	"URL_SHORTENER/controller"
+	"URL_SHORTENER/storage"
 
 	"github.com/gorilla/mux"
 	_ "github.com/mattn/go-sqlite3"

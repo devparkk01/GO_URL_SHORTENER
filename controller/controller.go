@@ -1,8 +1,6 @@
 package controller
 
 import (
-	"URL_SHORTENER/models"
-	"URL_SHORTENER/storage"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -11,6 +9,9 @@ import (
 	"math/big"
 	"net/http"
 	"time"
+
+	"URL_SHORTENER/models"
+	"URL_SHORTENER/storage"
 )
 
 const (
@@ -114,8 +115,8 @@ func UpdateShortUrl(w http.ResponseWriter, r *http.Request) {
 		ServerResponse(w, http.StatusBadRequest, ErrorResponse{Error: "Short Url does not exist"})
 		return
 	}
-	created_at := time.Now().Format(YYYYMMDDhhmmss)
-	err = store.UpdateShortUrl(newShortUrl, shortUrl, created_at)
+	createdAt := time.Now().Format(YYYYMMDDhhmmss)
+	err = store.UpdateShortUrl(newShortUrl, shortUrl, createdAt)
 	if err != nil {
 		ServerResponse(w, http.StatusInternalServerError, ErrorResponse{Error: "Error updating short url."})
 		return
