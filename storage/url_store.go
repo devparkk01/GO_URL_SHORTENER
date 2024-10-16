@@ -1,14 +1,17 @@
 package storage
 
 import (
-	"URL_SHORTENER/models"
 	"database/sql"
+	"sync"
+
+	"URL_SHORTENER/models"
 )
 
 const SQLITE = "sqlite3"
 
 type URLStore struct {
-	db *sql.DB
+	db    *sql.DB    // Sqlite database
+	mutex sync.Mutex // Mutex for thread safety
 }
 
 type URLOperations interface {
@@ -43,6 +46,9 @@ func NewURLStore(dbPath string) (*URLStore, error) {
 }
 
 func (s *URLStore) InsertUrl(url *models.Url) error {
+	// Lock the mutex before performing insert operation
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	insertUrlQuery := `INSERT INTO urls (original_url, short_url, created_at) VALUES (?, ?, ?)`
 	_, err := s.db.Exec(insertUrlQuery, url.OriginalUrl, url.ShortUrl, url.CreatedAt)
 	if err != nil {
@@ -79,6 +85,9 @@ func (s *URLStore) GetOriginalUrl(shortUrl string) (*models.Url, error) {
 }
 
 func (s *URLStore) DeleteShortUrl(shortUrl string) error {
+	// Lock the mutex before performing delete operation
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	deleteUrlQuery := `DELETE FROM urls WHERE short_url = ?`
 	_, err := s.db.Exec(deleteUrlQuery, shortUrl)
 	if err != nil {
@@ -88,6 +97,9 @@ func (s *URLStore) DeleteShortUrl(shortUrl string) error {
 }
 
 func (s *URLStore) UpdateShortUrl(updatedShortUrl string, shortUrl string, created_at string) error {
+	// Lock the mutex before performing update operation
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 	updateUrlQuery := `UPDATE urls SET short_url = ?, created_at = ? WHERE short_url = ?`
 	_, err := s.db.Exec(updateUrlQuery, updatedShortUrl, created_at, shortUrl)
 	if err != nil {
