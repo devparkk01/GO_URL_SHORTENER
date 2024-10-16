@@ -1,20 +1,23 @@
 package tests
 
 import (
-	"URL_SHORTENER/controller"
-	"URL_SHORTENER/models"
-	"URL_SHORTENER/storage"
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/mux"
-	_ "github.com/mattn/go-sqlite3"
-	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"testing"
 	"time"
+
+	"URL_SHORTENER/controller"
+	"URL_SHORTENER/models"
+	"URL_SHORTENER/storage"
+
+	"github.com/gorilla/mux"
+	_ "github.com/mattn/go-sqlite3"
+	"github.com/stretchr/testify/require"
 )
 
 var endpoint = "/api/short"
@@ -226,4 +229,115 @@ func TestCreateUpdateRetrieveShortUrl(t *testing.T) {
 	require.Equal(t, http.StatusOK, result.StatusCode)
 	require.Equal(t, updatedShortUrl, getShortUrlResp.ShortUrl)
 	require.Equal(t, originalUrl, getShortUrlResp.OriginalUrl)
+}
+
+func TestConcurrentAccess(t *testing.T) {
+	router, urlStore := SetupTestDB(t)
+	defer urlStore.Close()
+
+	var mutex sync.Mutex
+	var wg sync.WaitGroup
+	var shortUrl = ""
+	var updatedShortUrl = ""
+	var errorCount = 0
+	originalUrl := "http://example.com"
+	concurrencyCount := 5
+
+	// Concurrently insert URL
+	for i := 0; i < concurrencyCount; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			createShortUrlParams := &controller.CreateShortUrlRequestParams{
+				OriginalUrl: originalUrl,
+			}
+			jsonBody, _ := json.Marshal(createShortUrlParams)
+
+			req := httptest.NewRequest(http.MethodPost, "/api/short", bytes.NewBuffer(jsonBody))
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			res := w.Result()
+			shortUrlRes := &controller.ShortUrlResponse{}
+			_ = json.NewDecoder(res.Body).Decode(shortUrlRes)
+			// Count the no of instances error is Encountered
+			if res.StatusCode == http.StatusConflict {
+				mutex.Lock()
+				errorCount++
+				mutex.Unlock()
+			} else {
+				shortUrl = shortUrlRes.ShortUrl
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	// Verify no of instances error encountered is (total concurrency - 1)
+	require.Equal(t, concurrencyCount-1, errorCount)
+
+	// Verify if the original URL exists
+	require.True(t, urlStore.CheckOriginalUrlExists(originalUrl))
+	// Verify if the short URL exists
+	require.True(t, urlStore.CheckShortUrlExists(shortUrl))
+
+	// reset error count
+	errorCount = 0
+
+	// Concurrently update short URL
+	for i := 0; i < concurrencyCount; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+
+			req := httptest.NewRequest(http.MethodPut, "/api/short/"+shortUrl, nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			res := w.Result()
+			updateShortUrlResp := &controller.UpdateShortUrlResponse{}
+			_ = json.NewDecoder(res.Body).Decode(updateShortUrlResp)
+			// Count the no of instances error is Encountered
+			if res.StatusCode == http.StatusNotFound {
+				mutex.Lock()
+				errorCount++
+				mutex.Unlock()
+			} else {
+				updatedShortUrl = updateShortUrlResp.UpdatedShortUrl
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	// Verify no of instances error encountered is (total concurrency - 1)
+	require.Equal(t, concurrencyCount-1, errorCount)
+
+	// Verify if the updated URL exists
+	require.True(t, urlStore.CheckShortUrlExists(updatedShortUrl))
+
+	// reset count to 0
+	errorCount = 0
+
+	// Concurrently Delete short URL
+	for i := 0; i < concurrencyCount; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+
+			deleteReq := httptest.NewRequest(http.MethodDelete, "/api/short/"+updatedShortUrl, nil)
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, deleteReq)
+			res := w.Result()
+			// Count the no of instances error is Encountered
+			if res.StatusCode == http.StatusNotFound {
+				mutex.Lock()
+				errorCount++
+				mutex.Unlock()
+			}
+		}(i)
+	}
+	wg.Wait()
+	// Verify no of instances error encountered is (total concurrency - 1)
+	require.Equal(t, concurrencyCount-1, errorCount)
+	// Verify the URL has been deleted
+	require.False(t, urlStore.CheckShortUrlExists(shortUrl))
+	require.False(t, urlStore.CheckShortUrlExists(updatedShortUrl))
+	require.False(t, urlStore.CheckOriginalUrlExists(originalUrl))
 }
