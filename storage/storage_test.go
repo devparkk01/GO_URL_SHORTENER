@@ -11,6 +11,7 @@ import (
 func TestNewURLStore(t *testing.T) {
 
 	t.Run("DB_PATH is not set", func(t *testing.T) {
+		_ = os.Unsetenv("DB_PATH")
 		urlStore, err := NewURLStore()
 		require.NotNil(t, err)
 		require.Nil(t, urlStore)
