@@ -2,6 +2,8 @@ package storage
 
 import (
 	"database/sql"
+	"errors"
+	"os"
 	"sync"
 
 	"URL_SHORTENER/models"
@@ -24,21 +26,31 @@ type URLOperations interface {
 }
 
 func NewURLStore(dbPath string) (*URLStore, error) {
+	dbPath = os.Getenv("DB_PATH")
+	if dbPath == "" {
+		return nil, errors.New("DB_PATH environment variable not set")
+	}
 	db, err := sql.Open(SQLITE, dbPath)
 	if err != nil {
 		return nil, err
 	}
-	if dbPath == ":memory:" {
-		_, err = db.Exec(`
-			CREATE TABLE urls (
-			original_url TEXT PRIMARY KEY NOT NULL,
-			short_url TEXT NOT NULL,
-			created_at TEXT NOT NULL
+	// Create the table if not already created
+	_, err = db.Exec(`
+			CREATE TABLE IF NOT EXISTS "urls" (
+				original_url TEXT PRIMARY KEY NOT NULL,
+				short_url TEXT NOT NULL,
+				created_at TEXT NOT NULL
 			);
 		`)
-		if err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, errors.New("Failed to create table: " + err.Error())
+	}
+	// Create index on the short_url
+	_, err = db.Exec(`
+				CREATE index IF NOT EXISTS idx_short ON urls (short_url);
+		`)
+	if err != nil {
+		return nil, errors.New("Failed to create index: " + err.Error())
 	}
 	return &URLStore{
 		db: db,

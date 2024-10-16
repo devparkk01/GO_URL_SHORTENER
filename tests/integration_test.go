@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 )
@@ -21,6 +22,7 @@ var endpoint = "/api/short"
 func SetupTestDB(t *testing.T) (*mux.Router, *storage.URLStore) {
 	// Create an in-memory database
 	dbPath := ":memory:"
+	_ = os.Setenv("DB_PATH", dbPath)
 	store, err := storage.NewURLStore(dbPath)
 	require.NoError(t, err)
 
