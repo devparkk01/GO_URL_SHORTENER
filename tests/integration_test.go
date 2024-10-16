@@ -7,19 +7,18 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/gorilla/mux"
+	_ "github.com/mattn/go-sqlite3"
+	"github.com/stretchr/testify/require"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
-
-	"github.com/gorilla/mux"
-	_ "github.com/mattn/go-sqlite3"
-	"github.com/stretchr/testify/require"
 )
 
 var endpoint = "/api/short"
 
-func SetupTestDB(t *testing.T) (*httptest.Server, *storage.URLStore) {
+func SetupTestDB(t *testing.T) (*mux.Router, *storage.URLStore) {
 	// Create an in-memory database
 	dbPath := ":memory:"
 	store, err := storage.NewURLStore(dbPath)
@@ -36,12 +35,12 @@ func SetupTestDB(t *testing.T) (*httptest.Server, *storage.URLStore) {
 	router.HandleFunc(routePrefix+"/{short_url}", controller.UpdateShortUrl).Methods("PUT")
 	router.HandleFunc(routePrefix+"/{short_url}", controller.DeleteShortUrl).Methods("DELETE")
 
-	// Return a test server running the router
-	return httptest.NewServer(router), store
+	_ = httptest.NewServer(router)
+	return router, store
 }
 
 func TestCreateShortUrlIntegration(t *testing.T) {
-	server, store := SetupTestDB(t)
+	router, store := SetupTestDB(t)
 	defer store.Close()
 
 	originalUrl := "http://example.com"
@@ -51,24 +50,24 @@ func TestCreateShortUrlIntegration(t *testing.T) {
 	jsonBody, _ := json.Marshal(params)
 
 	// Perform the POST request
-	resp, err := http.Post(server.URL+endpoint, "application/json", bytes.NewBuffer(jsonBody))
-	require.NoError(t, err)
-	defer resp.Body.Close()
+	req := httptest.NewRequest(http.MethodPost, endpoint, bytes.NewBuffer(jsonBody))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	result := w.Result()
 
-	// Assert the response
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
-
-	// Decode the response
+	// Unmarshal the response
 	var createShortResp controller.ShortUrlResponse
-	err = json.NewDecoder(resp.Body).Decode(&createShortResp)
-	require.NoError(t, err)
+	_ = json.NewDecoder(result.Body).Decode(&createShortResp)
+
+	// Verify the response
+	require.Equal(t, http.StatusCreated, result.StatusCode)
 	require.Equal(t, originalUrl, createShortResp.OriginalUrl)
 	require.NotEmpty(t, createShortResp.ShortUrl)
 	require.NotEmpty(t, createShortResp.CreatedAt)
 }
 
 func TestRedirectUrlIntegration(t *testing.T) {
-	server, store := SetupTestDB(t)
+	router, store := SetupTestDB(t)
 	defer store.Close()
 
 	originalUrl := "http://example.com"
@@ -83,25 +82,25 @@ func TestRedirectUrlIntegration(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Perform the GET request to redirect
-	resp, err := http.Get(server.URL + fmt.Sprintf("%s/%s", endpoint, shortUrl))
-	require.NoError(t, err)
-	defer resp.Body.Close()
+	// Perform the GET request
+	req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s", endpoint, shortUrl), nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	result := w.Result()
 
-	// Assert the response
-	require.Equal(t, http.StatusOK, resp.StatusCode)
+	// Unmarshal the response
 	redirectUrlResp := &controller.ShortUrlResponse{}
-	_ = json.NewDecoder(resp.Body).Decode(&redirectUrlResp)
+	_ = json.NewDecoder(result.Body).Decode(&redirectUrlResp)
 
-	// Verify that the redirect location matches the original URL
+	// Verify the response
+	require.Equal(t, http.StatusOK, result.StatusCode)
 	require.Equal(t, originalUrl, redirectUrlResp.OriginalUrl)
 	require.Equal(t, shortUrl, redirectUrlResp.ShortUrl)
-	parsedTime, _ := time.Parse(time.RFC3339, redirectUrlResp.CreatedAt)
-	require.Equal(t, createdAt, parsedTime.Format(controller.YYYYMMDDhhmmss))
+	require.Equal(t, createdAt, redirectUrlResp.CreatedAt)
 }
 
 func TestDeleteShortUrlIntegration(t *testing.T) {
-	server, store := SetupTestDB(t)
+	router, store := SetupTestDB(t)
 	defer store.Close()
 
 	shortUrl := "esd87df7"
@@ -116,22 +115,20 @@ func TestDeleteShortUrlIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	// Perform the DELETE request
-	req, err := http.NewRequest(http.MethodDelete, server.URL+fmt.Sprintf("%s/%s", endpoint, shortUrl), nil)
-	require.NoError(t, err)
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
+	req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("%s/%s", endpoint, shortUrl), nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	result := w.Result()
 
-	// Assert the response
-	require.Equal(t, http.StatusOK, resp.StatusCode)
+	// Verify the response
+	require.Equal(t, http.StatusOK, result.StatusCode)
 	// Check the URL has been deleted from the database
 	exists := store.CheckShortUrlExists(shortUrl)
 	require.False(t, exists)
 }
 
 func TestUpdateShortUrlIntegration(t *testing.T) {
-	server, store := SetupTestDB(t)
+	router, store := SetupTestDB(t)
 	defer store.Close()
 
 	shortUrl := "esd87df7"
@@ -147,21 +144,18 @@ func TestUpdateShortUrlIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	// Perform the PUT request
-	req, err := http.NewRequest(http.MethodPut, server.URL+fmt.Sprintf("%s/%s", endpoint, shortUrl), nil)
-	require.NoError(t, err)
-	//req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
+	req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("%s/%s", endpoint, shortUrl), nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	result := w.Result()
 
+	// Unmarshal the response
 	updateShortUrlRes := &controller.UpdateShortUrlResponse{}
-	_ = json.NewDecoder(resp.Body).Decode(updateShortUrlRes)
-
+	_ = json.NewDecoder(result.Body).Decode(updateShortUrlRes)
 	updatedShortUrl := updateShortUrlRes.UpdatedShortUrl
 
-	// Assert the response
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	// Verify the response
+	require.Equal(t, http.StatusCreated, result.StatusCode)
 	require.NotEqual(t, shortUrl, updatedShortUrl)
 
 	// Ensure the previous short url has been removed from the database
@@ -174,4 +168,60 @@ func TestUpdateShortUrlIntegration(t *testing.T) {
 	require.NotNil(t, url)
 	require.Nil(t, err)
 	require.Equal(t, url.OriginalUrl, originalUrl)
+}
+
+func TestCreateUpdateRetrieveShortUrl(t *testing.T) {
+	router, store := SetupTestDB(t)
+	defer store.Close()
+
+	// Step 1: Create a new short URL
+	originalUrl := "http://example.com"
+	createShortUrlParams := &controller.CreateShortUrlRequestParams{
+		OriginalUrl: originalUrl,
+	}
+	jsonBody, _ := json.Marshal(createShortUrlParams)
+	req := httptest.NewRequest(http.MethodPost, endpoint, bytes.NewBuffer(jsonBody))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	result := w.Result()
+
+	// Unmarshal the response
+	createShortUrlResp := &controller.ShortUrlResponse{}
+	_ = json.NewDecoder(result.Body).Decode(createShortUrlResp)
+
+	// Verify the response
+	require.Equal(t, http.StatusCreated, result.StatusCode)
+	require.Equal(t, originalUrl, createShortUrlResp.OriginalUrl)
+	shortUrl := createShortUrlResp.ShortUrl
+	require.NotNil(t, shortUrl)
+
+	// Step 2: Update the short url
+	req = httptest.NewRequest(http.MethodPut, fmt.Sprintf("%s/%s", endpoint, shortUrl), nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	result = w.Result()
+
+	// Unmarshal the response
+	updateShortUrlResp := &controller.UpdateShortUrlResponse{}
+	_ = json.NewDecoder(result.Body).Decode(updateShortUrlResp)
+
+	// Verify the response
+	require.Equal(t, http.StatusCreated, result.StatusCode)
+	updatedShortUrl := updateShortUrlResp.UpdatedShortUrl
+	require.NotNil(t, updatedShortUrl)
+
+	// Step 3: Retrieve the updated short url
+	req = httptest.NewRequest(http.MethodGet, fmt.Sprintf("%s/%s", endpoint, updatedShortUrl), nil)
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	result = w.Result()
+
+	// Unmarshal the response
+	getShortUrlResp := &controller.ShortUrlResponse{}
+	_ = json.NewDecoder(result.Body).Decode(getShortUrlResp)
+
+	// Verify the response
+	require.Equal(t, http.StatusOK, result.StatusCode)
+	require.Equal(t, updatedShortUrl, getShortUrlResp.ShortUrl)
+	require.Equal(t, originalUrl, getShortUrlResp.OriginalUrl)
 }
