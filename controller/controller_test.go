@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"URL_SHORTENER/models"
+	"URL_SHORTENER/storage"
 
 	"github.com/golang/mock/gomock"
 	"github.com/gorilla/mux"
@@ -40,7 +41,7 @@ func TestCreateShortUrl(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, res.StatusCode)
 	})
 
-	t.Run("Original already exists", func(t *testing.T) {
+	t.Run("Original url already exists", func(t *testing.T) {
 		resources := SetupTestDB(t)
 		defer resources.TearDown()
 
@@ -51,8 +52,10 @@ func TestCreateShortUrl(t *testing.T) {
 			OriginalUrl: originalUrl,
 		}
 		jsonBody, _ := json.Marshal(params)
+		mockErr := errors.New(storage.ErrURLAlreadyShortened)
+
 		// Setup expectations
-		resources.MockDb.EXPECT().CheckOriginalUrlExists(params.OriginalUrl).Times(1).Return(true)
+		resources.MockDb.EXPECT().InsertUrl(gomock.Any()).Times(1).Return(mockErr)
 
 		req := httptest.NewRequest(http.MethodPost, routePrefix, bytes.NewBuffer(jsonBody))
 		w := httptest.NewRecorder()
@@ -63,7 +66,7 @@ func TestCreateShortUrl(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		res := w.Result()
-		require.Equal(t, http.StatusBadRequest, res.StatusCode)
+		require.Equal(t, http.StatusConflict, res.StatusCode)
 	})
 
 	t.Run("Successful short URL generation", func(t *testing.T) {
@@ -79,7 +82,7 @@ func TestCreateShortUrl(t *testing.T) {
 		}
 		jsonBody, _ := json.Marshal(params)
 
-		resources.MockDb.EXPECT().CheckOriginalUrlExists(originalUrl).Times(1).Return(false)
+		// Setup expectations
 		resources.MockDb.EXPECT().InsertUrl(gomock.Any()).Times(1).Return(nil)
 
 		req := httptest.NewRequest(http.MethodPost, routePrefix, bytes.NewBuffer(jsonBody))
@@ -110,8 +113,8 @@ func TestRedirectUrl(t *testing.T) {
 		defer resources.TearDown()
 
 		shortUrl := "esd87df7"
-		err := errors.New("")
-		resources.MockDb.EXPECT().GetOriginalUrl(shortUrl).Times(1).Return(nil, err)
+		mockErr := errors.New(storage.ErrShortURLDoesNotExist)
+		resources.MockDb.EXPECT().GetOriginalUrl(shortUrl).Times(1).Return(nil, mockErr)
 
 		req := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/api/short/%s", shortUrl), nil)
 		w := httptest.NewRecorder()
@@ -171,7 +174,8 @@ func TestDeleteShortUrl(t *testing.T) {
 
 		mockShortUrl := "esd87df7"
 		// Setup expectations
-		resources.MockDb.EXPECT().CheckShortUrlExists(mockShortUrl).Times(1).Return(false)
+		mockErr := errors.New(storage.ErrShortURLDoesNotExist)
+		resources.MockDb.EXPECT().DeleteShortUrl(mockShortUrl).Times(1).Return(mockErr)
 		// Create API request
 		req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/short/%s", mockShortUrl), nil)
 		w := httptest.NewRecorder()
@@ -182,7 +186,7 @@ func TestDeleteShortUrl(t *testing.T) {
 
 		// Validate the response
 		res := w.Result()
-		require.Equal(t, http.StatusBadRequest, res.StatusCode)
+		require.Equal(t, http.StatusNotFound, res.StatusCode)
 	})
 
 	t.Run("Successful Short URL deletion", func(t *testing.T) {
@@ -191,7 +195,6 @@ func TestDeleteShortUrl(t *testing.T) {
 
 		mockShortUrl := "esd87df7"
 		// Setup expectations
-		resources.MockDb.EXPECT().CheckShortUrlExists(mockShortUrl).Times(1).Return(true)
 		resources.MockDb.EXPECT().DeleteShortUrl(mockShortUrl).Times(1).Return(nil)
 		// Create API request
 		req := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/api/short/%s", mockShortUrl), nil)
@@ -217,7 +220,8 @@ func TestUpdateShortUrl(t *testing.T) {
 
 		mockShortUrl := "esd87df7"
 		// Setup expectations
-		resources.MockDb.EXPECT().CheckShortUrlExists(mockShortUrl).Times(1).Return(false)
+		mockErr := errors.New(storage.ErrShortURLDoesNotExist)
+		resources.MockDb.EXPECT().UpdateShortUrl(gomock.Any(), mockShortUrl, gomock.Any()).Times(1).Return(mockErr)
 		// Create API request
 		req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/short/%s", mockShortUrl), nil)
 		w := httptest.NewRecorder()
@@ -227,7 +231,7 @@ func TestUpdateShortUrl(t *testing.T) {
 		router.ServeHTTP(w, req)
 
 		res := w.Result()
-		require.Equal(t, http.StatusBadRequest, res.StatusCode)
+		require.Equal(t, http.StatusNotFound, res.StatusCode)
 	})
 
 	t.Run("Successful short url updation", func(t *testing.T) {
@@ -236,7 +240,6 @@ func TestUpdateShortUrl(t *testing.T) {
 
 		mockShortUrl := "esd87df7"
 		// Setup expectations
-		resources.MockDb.EXPECT().CheckShortUrlExists(mockShortUrl).Times(1).Return(true)
 		resources.MockDb.EXPECT().UpdateShortUrl(gomock.Any(), mockShortUrl, gomock.Any()).Times(1).Return(nil)
 		// Create API request
 		req := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/api/short/%s", mockShortUrl), nil)
@@ -276,31 +279,4 @@ func TestGenerateUniqueShortUrl(t *testing.T) {
 			t.Errorf("Generated URL contains invalid character: %c", char)
 		}
 	}
-}
-
-func TestCheckOriginalUrlExists(t *testing.T) {
-
-	t.Run("CheckOriginalUrlExists returns false ", func(t *testing.T) {
-		resources := SetupTestDB(t)
-		defer resources.TearDown()
-		mockOriginalUrl := "http://example.com"
-
-		// Setup expectations
-		resources.MockDb.EXPECT().CheckOriginalUrlExists(mockOriginalUrl).Times(1).Return(false)
-
-		res := checkOriginalUrlExists(mockOriginalUrl)
-		require.False(t, res)
-	})
-
-	t.Run("CheckOriginalUrlExists returns true ", func(t *testing.T) {
-		resources := SetupTestDB(t)
-		defer resources.TearDown()
-		mockOriginalUrl := "http://example.com"
-
-		// Setup expectations
-		resources.MockDb.EXPECT().CheckOriginalUrlExists(mockOriginalUrl).Times(1).Return(true)
-
-		res := checkOriginalUrlExists(mockOriginalUrl)
-		require.True(t, res)
-	})
 }

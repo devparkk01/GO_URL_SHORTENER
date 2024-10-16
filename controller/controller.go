@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
-	"log"
 	"math/big"
 	"net/http"
 	"time"
@@ -63,7 +62,12 @@ func CreateShortUrl(w http.ResponseWriter, r *http.Request) {
 
 	err = store.InsertUrl(url)
 	if err != nil {
-		ServerResponse(w, http.StatusInternalServerError, ErrorResponse{Error: "Error creating url"})
+		// If the URL has already been Shortened
+		if err.Error() == storage.ErrURLAlreadyShortened {
+			ServerResponse(w, http.StatusConflict, ErrorResponse{Error: err.Error()})
+		} else {
+			ServerResponse(w, http.StatusInternalServerError, ErrorResponse{Error: "Error creating url"})
+		}
 		return
 	}
 	// convert DB response to API response
@@ -83,7 +87,7 @@ func RedirectUrl(w http.ResponseWriter, r *http.Request) {
 	}
 	url, err := store.GetOriginalUrl(shortUrl)
 	if err != nil {
-		ServerResponse(w, http.StatusNotFound, ErrorResponse{Error: "Short Url does not exist"})
+		ServerResponse(w, http.StatusNotFound, ErrorResponse{Error: storage.ErrShortURLDoesNotExist})
 		return
 	}
 
@@ -102,18 +106,17 @@ func UpdateShortUrl(w http.ResponseWriter, r *http.Request) {
 		ServerResponse(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
-	log.Println(shortUrl)
 
 	newShortUrl := generateUniqueShortUrl(8)
-	// find if the URL exists in the DB
-	if !store.CheckShortUrlExists(shortUrl) {
-		ServerResponse(w, http.StatusBadRequest, ErrorResponse{Error: "Short Url does not exist"})
-		return
-	}
 	createdAt := time.Now().Format(YYYYMMDDhhmmss)
 	err = store.UpdateShortUrl(newShortUrl, shortUrl, createdAt)
 	if err != nil {
-		ServerResponse(w, http.StatusInternalServerError, ErrorResponse{Error: "Error updating short url."})
+		// If the Short url does not exist
+		if err.Error() == storage.ErrShortURLDoesNotExist {
+			ServerResponse(w, http.StatusNotFound, ErrorResponse{Error: err.Error()})
+		} else {
+			ServerResponse(w, http.StatusInternalServerError, ErrorResponse{Error: "Error updating short url."})
+		}
 		return
 	}
 	// convert DB response to API response
@@ -131,15 +134,14 @@ func DeleteShortUrl(w http.ResponseWriter, r *http.Request) {
 		ServerResponse(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
-	log.Println(shortUrl)
-	// find if the URL exists in the DB
-	if !store.CheckShortUrlExists(shortUrl) {
-		ServerResponse(w, http.StatusBadRequest, ErrorResponse{Error: "Short Url does not exist"})
-		return
-	}
 	err = store.DeleteShortUrl(shortUrl)
 	if err != nil {
-		ServerResponse(w, http.StatusInternalServerError, ErrorResponse{Error: "Error deleting short url."})
+		// If the Short url does not exist
+		if err.Error() == storage.ErrShortURLDoesNotExist {
+			ServerResponse(w, http.StatusNotFound, ErrorResponse{Error: err.Error()})
+		} else {
+			ServerResponse(w, http.StatusInternalServerError, ErrorResponse{Error: "Error deleting short url."})
+		}
 		return
 	}
 	ServerResponse(w, http.StatusOK, "Deletion Successful.")
@@ -155,16 +157,9 @@ func generateUniqueShortUrl(length int) string {
 	return string(shortUrl)
 }
 
-func checkOriginalUrlExists(originalUrl string) bool {
-	return store.CheckOriginalUrlExists(originalUrl)
-}
-
 func validateShortenUrlParams(params *CreateShortUrlRequestParams) error {
 	if params.OriginalUrl == "" {
 		return errors.New("Original Url can not be empty")
-	}
-	if checkOriginalUrlExists(params.OriginalUrl) {
-		return errors.New("Original url already exists")
 	}
 	return nil
 }

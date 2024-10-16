@@ -16,6 +16,9 @@ type URLStore struct {
 	mutex sync.Mutex // Mutex for thread safety
 }
 
+var ErrURLAlreadyShortened = "Requested Original URL has already been shortened."
+var ErrShortURLDoesNotExist = "The specified Short URL does not exist."
+
 type URLOperations interface {
 	InsertUrl(url *models.Url) error
 	CheckShortUrlExists(shortUrl string) bool
@@ -61,6 +64,12 @@ func (s *URLStore) InsertUrl(url *models.Url) error {
 	// Lock the mutex before performing insert operation
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+
+	// Check if the original URL already exists
+	if s.CheckOriginalUrlExists(url.OriginalUrl) {
+		return errors.New(ErrURLAlreadyShortened)
+	}
+
 	insertUrlQuery := `INSERT INTO urls (original_url, short_url, created_at) VALUES (?, ?, ?)`
 	_, err := s.db.Exec(insertUrlQuery, url.OriginalUrl, url.ShortUrl, url.CreatedAt)
 	if err != nil {
@@ -100,6 +109,9 @@ func (s *URLStore) DeleteShortUrl(shortUrl string) error {
 	// Lock the mutex before performing delete operation
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	if !s.CheckShortUrlExists(shortUrl) {
+		return errors.New(ErrShortURLDoesNotExist)
+	}
 	deleteUrlQuery := `DELETE FROM urls WHERE short_url = ?`
 	_, err := s.db.Exec(deleteUrlQuery, shortUrl)
 	if err != nil {
@@ -112,6 +124,9 @@ func (s *URLStore) UpdateShortUrl(updatedShortUrl string, shortUrl string, creat
 	// Lock the mutex before performing update operation
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	if !s.CheckShortUrlExists(shortUrl) {
+		return errors.New(ErrShortURLDoesNotExist)
+	}
 	updateUrlQuery := `UPDATE urls SET short_url = ?, created_at = ? WHERE short_url = ?`
 	_, err := s.db.Exec(updateUrlQuery, updatedShortUrl, created_at, shortUrl)
 	if err != nil {
