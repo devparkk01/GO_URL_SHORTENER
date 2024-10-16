@@ -16,7 +16,7 @@ import (
 func main() {
 	routePrefix := "/api/short"
 	port := ":8080"
-	dbPath := "data/database.sqlite3"
+	dbPath := "database.sqlite3"
 	_ = os.Setenv("DB_PATH", dbPath)
 	// Get a new URL store
 	store, err := storage.NewURLStore()
