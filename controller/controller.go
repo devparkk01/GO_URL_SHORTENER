@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"math/big"
 	"net/http"
@@ -43,7 +42,6 @@ type UpdateShortUrlResponse struct {
 func CreateShortUrl(w http.ResponseWriter, r *http.Request) {
 	params := new(CreateShortUrlRequestParams)
 	err := json.NewDecoder(r.Body).Decode(&params)
-	fmt.Printf("Long url : {%s}", params.OriginalUrl)
 	if err != nil {
 		ServerResponse(w, http.StatusBadRequest, ErrorResponse{Error: "Invalid request parameters"})
 		return
@@ -83,13 +81,11 @@ func RedirectUrl(w http.ResponseWriter, r *http.Request) {
 		ServerResponse(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
-	fmt.Printf("short url %s\n", shortUrl)
 	url, err := store.GetOriginalUrl(shortUrl)
 	if err != nil {
 		ServerResponse(w, http.StatusNotFound, ErrorResponse{Error: "Short Url does not exist"})
 		return
 	}
-	fmt.Println(url)
 
 	// convert DB response to API response
 	response := ShortUrlResponse{
@@ -97,7 +93,6 @@ func RedirectUrl(w http.ResponseWriter, r *http.Request) {
 		ShortUrl:    url.ShortUrl,
 		CreatedAt:   url.CreatedAt,
 	}
-	fmt.Println(response)
 	ServerResponse(w, http.StatusOK, response)
 }
 
