@@ -22,7 +22,7 @@ type ErrorResponse struct {
 func ServerResponse(w http.ResponseWriter, statusCode int, body interface{}) {
 	SetHeader(w, contentType, applicationJson)
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(body)
+	_ = json.NewEncoder(w).Encode(body)
 }
 
 func SetHeader(w http.ResponseWriter, key, value string) {
